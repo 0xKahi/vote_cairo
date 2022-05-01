@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from starkware.starknet.testing.starknet import Starknet
 from starkware.crypto.signature.signature import pedersen_hash
-from utils.utils import contract_path
+from utils.openzepplin.utils import contract_path
 from utils.accounts_utils import Account
 
 # The path to the contract source code.
@@ -42,37 +42,24 @@ async def test_account_contract(contract_factory):
     assert pkey.result == (user_1.public_key,)
 
 @pytest.mark.asyncio
-async def test_execute(contract_factory):
-    starknet, accounts,_,_ = contract_factory
-    initializable = await starknet.deploy(INITALIZABLE_FILE)
-
-    execution_info = await initializable.initialized().call()
-    assert execution_info.result == (0,)
-
-    await accounts[0].signer.send_transactions(accounts[0].contract, [(initializable.contract_address, 'initialize', [])])
-    #await accounts[0].tx_with_nonce(initializable.contract_address,'initalize',[])
-    execution_info = await initializable.initialized().call()
-    assert execution_info.result == (1,)
-
-@pytest.mark.asyncio
 async def test_vote(contract_factory):
     _, accounts, vote_contract, _= contract_factory
     user_1 = accounts[0]
     user_2 = accounts[1]
     poll_id = 1
+    yes_vote = 1
     #creating poll
-    trsc = await user_1.tx_with_nonce(vote_contract.contract_address, "init_poll",[poll_id, user_1.public_key])
-    print(trsc)
+    await user_1.tx_with_nonce(vote_contract.contract_address, "init_poll",[poll_id, user_1.public_key])
     # creating message for owner to sign to register voter
-    register_msg_hash = await pedersen_hash(1,user_2.public_key) 
-    (r,s) = await user_1.signer.sign(register_msg_hash)
+    sig_r, sig_s = user_1.hash_and_sign(poll_id,user_2.public_key)
     # register user_2 as a voter for poll id 1
-    await vote_contract.register_voter(poll_id=1,voter_public_key=user_2.public_key,r=r,s=s).invoke()
+    await vote_contract.register_voter(poll_id=poll_id,voter_public_key=user_2.public_key,r=sig_r,s=sig_s).invoke()
     # creating message for voters to sign wwhen they vote 
-    vote_msg_hash = await pedersen_hash(poll_id,1)
-    (r,s) = await user_2.signer.sign(vote_msg_hash)
-    await vote_contract.vote(voter_public_key=user_2.public_key,vote=1,poll_id=poll_id,r=r,s=s).invoke()
-    assert await vote_contract.get_voting_state(poll_id=1).call == (0,1)
+    sig_r, sig_s = user_2.hash_and_sign(poll_id,yes_vote)
+    # register user_2 as a voter for poll id 1
+    await vote_contract.vote(voter_public_key=user_2.public_key,vote=yes_vote,poll_id=poll_id,r=sig_r,s=sig_s).invoke()
+    res = await vote_contract.get_voting_state(poll_id=poll_id).call()
+    assert res.result == (0,1)
     
 
 

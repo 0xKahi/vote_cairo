@@ -90,6 +90,70 @@ func get_voting_state{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashB
     return (no_votes_len=no_count, yes_votes_len=yes_count)
 end
 
+# ? =============================== helper functions =======================================#
+# helper function to check users voting states
+func verify_vote{
+    syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*, ecdsa_ptr : SignatureBuiltin*
+}(poll_id : felt, voter_public_key : felt, vote : felt, r : felt, s : felt):
+    # verify that vote value is either 1(yes) or 0(no)
+    assert (vote - 0) * (vote - 1) = 0
+    # verify if voters are registered
+    let (is_registered) = registered_voters.read(poll_id=poll_id, voter_public_key=voter_public_key)
+    assert_not_zero(is_registered)
+    # verify that voter has not voted
+    let (has_voted) = voting_state.read(poll_id=poll_id, voter_public_key=voter_public_key)
+    assert has_voted = 0
+    # verify voter signature which supposedly signs hash (poll_id,vote)
+    let (message) = hash2{hash_ptr=pedersen_ptr}(x=poll_id, y=vote)
+    verify_ecdsa_signature(
+        message=message, public_key=voter_public_key, signature_r=r, signature_s=s
+    )
+    return ()
+end
+
+# helper function to check users voting states
+func verify_change_vote{
+    syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*, ecdsa_ptr : SignatureBuiltin*
+}(poll_id : felt, voter_public_key : felt, vote : felt, r : felt, s : felt):
+    # verify that vote value is either 1(yes) or 0(no)
+    assert (vote - 0) * (vote - 1) = 0
+    # verify if voters are registered
+    let (is_registered) = registered_voters.read(poll_id=poll_id, voter_public_key=voter_public_key)
+    assert_not_zero(is_registered)
+    # verify that voter has voted and that vote is not the same
+    let (has_voted) = voting_state.read(poll_id=poll_id, voter_public_key=voter_public_key)
+    assert_not_zero(has_voted)
+    # get voters answer
+    let (prev_vote) = voter_answer.read(poll_id=poll_id, voter_public_key=voter_public_key)
+    assert_not_equal(vote, prev_vote)
+    # verify voter signature which supposedly signs hash (poll_id,vote)
+    let (message) = hash2{hash_ptr=pedersen_ptr}(x=poll_id, y=vote)
+    verify_ecdsa_signature(
+        message=message, public_key=voter_public_key, signature_r=r, signature_s=s
+    )
+    return ()
+end
+
+# helper function to check if caller is owner
+func verify_owner{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*}(
+    poll_id : felt
+):
+    let (poll_data_tuple) = poll_owner_key_addr.read(poll_id=poll_id)
+    let (caller_address) = get_caller_address()
+    assert poll_data_tuple[1] = caller_address
+    return ()
+end
+
+# helper function to see if poll is finalized
+func verify_poll_final{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*}(
+    poll_id : felt
+):
+    alloc_locals
+    let (local recorder_addr) = recorder_contract.read()
+    IRecorderContract.verify_finalized(contract_address=recorder_addr, poll_id=poll_id)
+    return ()
+end
+# ? =================================== end ============================================#
 # let users vote
 @external
 func vote{
@@ -143,71 +207,6 @@ func finalize_poll{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuil
     let result = (result * 'Yes') + ((1 - result) * 'No')
     # record the poll result
     IRecorderContract.record(contract_address=recorder_addr, poll_id=poll_id, result=result)
-    return ()
-end
-
-# ? =============================== helper functions =======================================#
-# helper function to check if caller is owner
-func verify_owner{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*}(
-    poll_id : felt
-):
-    let (poll_data_tuple) = poll_owner_key_addr.read(poll_id=poll_id)
-    let (caller_address) = get_caller_address()
-    assert poll_data_tuple[1] = caller_address
-    return ()
-end
-
-# helper function to see if poll is finalized
-func verify_poll_final{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*}(
-    poll_id : felt
-):
-    alloc_locals
-    let (local recorder_addr) = recorder_contract.read()
-    IRecorderContract.verify_finalized(contract_address=recorder_addr, poll_id=poll_id)
-    return ()
-end
-
-# helper function to check users voting states
-func verify_vote{
-    syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*, ecdsa_ptr : SignatureBuiltin*
-}(poll_id : felt, voter_public_key : felt, vote : felt, r : felt, s : felt):
-    # verify that vote value is either 1(yes) or 0(no)
-    assert (vote - 0) * (vote - 1) = 0
-    # verify if voters are registered
-    let (is_registered) = registered_voters.read(poll_id=poll_id, voter_public_key=voter_public_key)
-    assert_not_zero(is_registered)
-    # verify that voter has not voted
-    let (has_voted) = voting_state.read(poll_id=poll_id, voter_public_key=voter_public_key)
-    assert has_voted = 0
-    # verify voter signature which supposedly signs hash (poll_id,vote)
-    let (message) = hash2{hash_ptr=pedersen_ptr}(x=poll_id, y=vote)
-    verify_ecdsa_signature(
-        message=message, public_key=voter_public_key, signature_r=r, signature_s=s
-    )
-
-    return ()
-end
-
-# helper function to check users voting states
-func verify_change_vote{
-    syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuiltin*, ecdsa_ptr : SignatureBuiltin*
-}(poll_id : felt, voter_public_key : felt, vote : felt, r : felt, s : felt):
-    # verify that vote value is either 1(yes) or 0(no)
-    assert (vote - 0) * (vote - 1) = 0
-    # verify if voters are registered
-    let (is_registered) = registered_voters.read(poll_id=poll_id, voter_public_key=voter_public_key)
-    assert_not_zero(is_registered)
-    # verify that voter has voted and that vote is not the same
-    let (has_voted) = voting_state.read(poll_id=poll_id, voter_public_key=voter_public_key)
-    assert_not_zero(has_voted)
-    # get voters answer
-    let (prev_vote) = voter_answer.read(poll_id=poll_id, voter_public_key=voter_public_key)
-    assert_not_equal(vote, prev_vote)
-    # verify voter signature which supposedly signs hash (poll_id,vote)
-    let (message) = hash2{hash_ptr=pedersen_ptr}(x=poll_id, y=vote)
-    verify_ecdsa_signature(
-        message=message, public_key=voter_public_key, signature_r=r, signature_s=s
-    )
     return ()
 end
 

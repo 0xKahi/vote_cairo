@@ -174,8 +174,7 @@ class Signer():
         sig_r, sig_s = self.sign(message_hash)
 
         return await account.__execute__(call_array, calldata, nonce).invoke(signature=[sig_r, sig_s])
-
-
+        
 def from_call_to_call_array(calls):
     call_array = []
     calldata = []
