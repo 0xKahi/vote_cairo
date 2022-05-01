@@ -194,7 +194,9 @@ func finalize_poll{syscall_ptr : felt*, range_check_ptr, pedersen_ptr : HashBuil
     poll_id : felt
 ):
     alloc_locals
-    verify_owner(poll_id=poll_id)
+    with_attr error_message("poll:{poll_id} not owned by account"):
+        verify_owner(poll_id=poll_id)
+    end
     verify_poll_final(poll_id=poll_id)
 
     let (local recorder_addr) = recorder_contract.read()

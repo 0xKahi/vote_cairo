@@ -1,4 +1,4 @@
-"""Utilities for testing Cairo contracts."""
+"""Utilities for testing Cairo contracts variation of openzepplin but uses nile signer instead."""
 
 from pathlib import Path
 import math
